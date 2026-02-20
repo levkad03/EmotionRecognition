@@ -6,3 +6,5 @@ pillow
 scikit-learn
 opencv-python
 mediapipe
+insightface
+onnxruntime-gpu

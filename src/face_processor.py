@@ -17,7 +17,10 @@ class FaceProcessor:
         self.detection_confidence = detection_confidence
 
         # Initialize InsightFace app
-        self.app = FaceAnalysis(providers=["CPUExecutionProvider"])
+
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+        self.app = FaceAnalysis(providers=providers)
         self.app.prepare(ctx_id=0, det_size=(640, 640))
 
     def detect_faces(self, image: np.ndarray) -> list[dict]:
