@@ -1,9 +1,7 @@
-import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
-import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
@@ -48,9 +46,9 @@ class RAFDBDataset(Dataset):
 
         # Load labels
         if split == "train":
-            label_file = self.dataset_dir / "train_labels.csv"
+            label_file = self.root_dir / "train_labels.csv"
         else:
-            label_file = self.dataset_dir / "test_labels.csv"
+            label_file = self.root_dir / "test_labels.csv"
 
         if not label_file.exists():
             raise FileNotFoundError(f"Label file not found: {label_file}")
@@ -93,7 +91,8 @@ class RAFDBDataset(Dataset):
                 print(f"Warning: Image not found: {filename}")
                 continue
 
-            # Convert label to 0-indexed TODO: Not sure if this is necessary
+            # Convert label to 0-indexed
+            # (CrossEntropyLoss expects indices starting from 0)
             label = int(label) - 1
 
             self.samples.append(
@@ -164,7 +163,65 @@ class RAFDBDataset(Dataset):
         weights = []
         for i in range(num_classes):
             count = label_counts.get(i, 0)
-            weight = total / (num_classes * count)
-            weights.append(weight)
+
+            if count == 0:
+                weights.append(0.0)
+            else:
+                weight = total / (num_classes * count)
+                weights.append(weight)
 
         return torch.FloatTensor(weights)
+
+
+if __name__ == "__main__":
+    from torch.utils.data import DataLoader
+    from torchvision import transforms
+
+    # Define transforms
+    train_transform = transforms.Compose(
+        [
+            transforms.Resize((224, 224)),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(10),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+
+    test_transform = transforms.Compose(
+        [
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+
+    # Create datasets
+    train_dataset = RAFDBDataset(
+        root_dir="data",  # Adjust this path
+        split="train",
+        transform=train_transform,
+    )
+
+    test_dataset = RAFDBDataset(root_dir="data", split="test", transform=test_transform)
+
+    # Create dataloaders
+    train_loader = DataLoader(
+        train_dataset, batch_size=32, shuffle=True, num_workers=4, pin_memory=True
+    )
+
+    test_loader = DataLoader(
+        test_dataset, batch_size=32, shuffle=False, num_workers=4, pin_memory=True
+    )
+
+    # Test loading
+    print("\nTesting data loading...")
+    images, labels = next(iter(train_loader))
+    print(f"Batch shape: {images.shape}")
+    print(f"Labels shape: {labels.shape}")
+    print(f"Sample labels: {labels[:5]}")
+
+    # Get class weights
+    class_weights = train_dataset.get_class_weights()
+    print(f"\nClass weights: {class_weights}")
