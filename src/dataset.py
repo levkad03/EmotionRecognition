@@ -26,7 +26,6 @@ class RAFDBDataset(Dataset):
         root_dir: str,
         split: Literal["train", "test"] = "train",
         transform: Callable | None = None,
-        use_aligned: bool = False,
     ) -> None:
         """Initialize RAF-DB dataset
 
@@ -34,12 +33,10 @@ class RAFDBDataset(Dataset):
             root_dir (str): Root directory of the RAF-DB dataset
             split (Literal["train", "test"]): Dataset split, either "train" or "test".
             transform (Callable | None): A function/transform to apply to the images.
-            use_aligned (bool): Whether to use aligned images.
         """
         self.root_dir = Path(root_dir)
         self.split = split
         self.transform = transform
-        self.use_aligned = use_aligned
 
         self.dataset_dir = self.root_dir / "DATASET"
         self.image_dir = self.dataset_dir / split
