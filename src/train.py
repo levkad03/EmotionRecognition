@@ -23,9 +23,16 @@ def get_transforms():
             A.HorizontalFlip(p=0.5),
             A.Rotate(limit=10, p=0.5),
             A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.5),
-            A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.1, rotate_limit=0, p=0.5),
-            A.CoarseDropout(max_holes=8, max_height=16, max_width=16, p=0.3),
-            A.GaussNoise(var_limit=(10.0, 50.0), p=0.2),
+            A.Affine(
+                translate_percent=0.1, scale=(0.9, 1.1), p=0.5
+            ),  # Replaces ShiftScaleRotate
+            A.CoarseDropout(
+                num_holes_range=(4, 8),
+                hole_height_range=(8, 16),
+                hole_width_range=(8, 16),
+                p=0.3,
+            ),
+            A.GaussNoise(var_limit=(10.0, 50.0), mean=0, p=0.2),
             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ToTensorV2(),
         ]
@@ -43,10 +50,14 @@ def get_transforms():
 
 
 def main():
+
+    # Set matmul precision for better performance
+    torch.set_float32_matmul_precision("medium")
+
     # Hyperparameters
-    BATCH_SIZE = 32
+    BATCH_SIZE = 16
     NUM_WORKERS = 4
-    MAX_EPOCHS = 50
+    MAX_EPOCHS = 20
     LEARNING_RATE = 1e-3
     WEIGHT_DECAY = 1e-4
     DROPOUT = 0.3
