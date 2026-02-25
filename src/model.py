@@ -180,7 +180,6 @@ class EmotionRecognitionModel(pl.LightningModule):
                 mode="max",
                 factor=0.5,
                 patience=3,
-                verbose=True,
             ),
             "monitor": "val/acc",
             "interval": "epoch",
