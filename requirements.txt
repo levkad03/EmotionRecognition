@@ -9,3 +9,5 @@ mediapipe
 insightface
 onnxruntime-gpu
 lightning
+wandb
+albumentations

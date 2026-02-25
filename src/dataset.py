@@ -2,6 +2,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
+import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
@@ -134,9 +135,15 @@ class RAFDBDataset(Dataset):
         label = sample["label"]
 
         image = Image.open(image_path).convert("RGB")
+        image = np.array(image)
 
         if self.transform:
-            image = self.transform(image)
+            # Albumentations expects numpy array and returns dict
+            transformed = self.transform(image=image)
+            image = transformed["image"]
+        else:
+            # Convert to tensor manually
+            image = torch.from_numpy(image.transpose((2, 0, 1))).float() / 255.0
 
         return image, label
 
@@ -171,32 +178,33 @@ class RAFDBDataset(Dataset):
 
 
 if __name__ == "__main__":
+    import albumentations as A
+    from albumentations.pytorch import ToTensorV2
     from torch.utils.data import DataLoader
-    from torchvision import transforms
 
-    # Define transforms
-    train_transform = transforms.Compose(
+    # Define transforms with Albumentations
+    train_transform = A.Compose(
         [
-            transforms.Resize((224, 224)),
-            transforms.RandomHorizontalFlip(p=0.5),
-            transforms.RandomRotation(10),
-            transforms.ColorJitter(brightness=0.2, contrast=0.2),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            A.Resize(224, 224),
+            A.HorizontalFlip(p=0.5),
+            A.Rotate(limit=10, p=0.5),
+            A.ColorJitter(brightness=0.2, contrast=0.2, p=0.5),
+            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ToTensorV2(),
         ]
     )
 
-    test_transform = transforms.Compose(
+    test_transform = A.Compose(
         [
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            A.Resize(224, 224),
+            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ToTensorV2(),
         ]
     )
 
     # Create datasets
     train_dataset = RAFDBDataset(
-        root_dir="data",  # Adjust this path
+        root_dir="data",
         split="train",
         transform=train_transform,
     )
