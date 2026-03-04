@@ -12,14 +12,15 @@ from torch.utils.data import Dataset
 class RAFDBDataset(Dataset):
     """Custom dataset class for RAF-DB facial expression dataset."""
 
+    # Use 0-indexed labels to match PyTorch convention
     EMOTION_LABELS = {
-        1: "Surprise",
-        2: "Fear",
-        3: "Disgust",
-        4: "Happiness",
-        5: "Sadness",
-        6: "Anger",
-        7: "Neutral",
+        0: "Surprise",
+        1: "Fear",
+        2: "Disgust",
+        3: "Happiness",
+        4: "Sadness",
+        5: "Anger",
+        6: "Neutral",
     }
 
     def __init__(
@@ -112,7 +113,8 @@ class RAFDBDataset(Dataset):
 
         print(f"\nClass distribution for {self.split} split:")
         for label_idx in sorted(label_counts.keys()):
-            emotion_name = self.EMOTION_LABELS.get(label_idx + 1, "Unknown")
+            # Now we can directly use label_idx since EMOTION_LABELS is 0-indexed
+            emotion_name = self.EMOTION_LABELS.get(label_idx, "Unknown")
             count = label_counts[label_idx]
             percentage = (count / len(self.samples)) * 100
             print(f"  {emotion_name}: {count} ({percentage:.1f}%)")
@@ -148,7 +150,7 @@ class RAFDBDataset(Dataset):
         return image, label
 
     def get_class_weights(self) -> torch.Tensor:
-        """Calculate class weights for imbalance dataset
+        """Calculate class weights for imbalanced dataset
 
         Returns:
             torch.Tensor: Class weights

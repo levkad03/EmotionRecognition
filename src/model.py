@@ -14,13 +14,13 @@ class EmotionRecognitionModel(pl.LightningModule):
     """Emotion recognition model using EfficientNet-B0 as backbone."""
 
     EMOTION_LABELS = {
-        1: "Surprise",
-        2: "Fear",
-        3: "Disgust",
-        4: "Happiness",
-        5: "Sadness",
-        6: "Anger",
-        7: "Neutral",
+        0: "Surprise",
+        1: "Fear",
+        2: "Disgust",
+        3: "Happiness",
+        4: "Sadness",
+        5: "Anger",
+        6: "Neutral",
     }
 
     def __init__(
@@ -50,8 +50,8 @@ class EmotionRecognitionModel(pl.LightningModule):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
 
-        # Load EfficientNet-B0 backbone
-        self.backbone = models.efficientnet_b0(pretrained=True)
+        # Load EfficientNet-B0 backbone (use weights instead of pretrained)
+        self.backbone = models.efficientnet_b0(weights="DEFAULT")
         num_features = self.backbone.classifier[1].in_features
 
         # Replace classifier
@@ -83,8 +83,22 @@ class EmotionRecognitionModel(pl.LightningModule):
         acc = self.train_accuracy(preds, labels)
 
         # Log metrics
-        self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log("train/acc", acc, on_step=True, on_epoch=True, prog_bar=True)
+        self.log(
+            "train/loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
+        self.log(
+            "train/acc",
+            acc,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
 
         return loss
 
@@ -98,8 +112,17 @@ class EmotionRecognitionModel(pl.LightningModule):
         acc = self.val_accuracy(preds, labels)
 
         # Log metrics
-        self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/acc", acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "val/loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
+        self.log(
+            "val/acc", acc, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True
+        )
 
         return loss
 
@@ -117,8 +140,17 @@ class EmotionRecognitionModel(pl.LightningModule):
         self.test_targets.append(labels)
 
         # Log metrics
-        self.log("test/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("test/acc", acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(
+            "test/loss",
+            loss,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            sync_dist=True,
+        )
+        self.log(
+            "test/acc", acc, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True
+        )
 
         return loss
 
@@ -137,7 +169,8 @@ class EmotionRecognitionModel(pl.LightningModule):
         self.test_targets.clear()
 
     def plot_confusion_matrix(self, targets, preds):
-        """Plot and save the confusion matrix."""
+        """Plot and save the confusion matrix, and log to WandB."""
+        import wandb
 
         cm = confusion_matrix(targets, preds)
 
@@ -151,13 +184,30 @@ class EmotionRecognitionModel(pl.LightningModule):
             yticklabels=list(self.EMOTION_LABELS.values()),
         )
         plt.title("Confusion Matrix")
-        plt.xlabel("Predicted Label")
         plt.ylabel("True Label")
+        plt.xlabel("Predicted Label")
         plt.tight_layout()
+
+        # Save locally
         plt.savefig("confusion_matrix.png", dpi=300, bbox_inches="tight")
+
+        # Log to WandB if logger is available
+        if self.logger:
+            self.logger.experiment.log(
+                {"confusion_matrix": wandb.Image("confusion_matrix.png")}
+            )
+
         plt.close()
 
         print("\nConfusion matrix saved to confusion_matrix.png")
+
+        # Get classification report
+        report = classification_report(
+            targets,
+            preds,
+            target_names=list(self.EMOTION_LABELS.values()),
+            output_dict=True,
+        )
 
         print("\nClassification Report:")
         print(
@@ -168,7 +218,28 @@ class EmotionRecognitionModel(pl.LightningModule):
             )
         )
 
+        # Log per-class metrics to WandB
+        if self.logger:
+            for emotion, metrics in report.items():
+                if emotion in self.EMOTION_LABELS.values():
+                    self.logger.experiment.log(
+                        {
+                            f"test/{emotion}_precision": metrics["precision"],
+                            f"test/{emotion}_recall": metrics["recall"],
+                            f"test/{emotion}_f1": metrics["f1-score"],
+                        }
+                    )
+
+            # Log overall metrics
+            self.logger.experiment.log(
+                {
+                    "test/macro_avg_f1": report["macro avg"]["f1-score"],
+                    "test/weighted_avg_f1": report["weighted avg"]["f1-score"],
+                }
+            )
+
     def configure_optimizers(self):
+        """Configure optimizer and learning rate scheduler."""
 
         optimizer = torch.optim.AdamW(
             self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay
@@ -187,3 +258,21 @@ class EmotionRecognitionModel(pl.LightningModule):
         }
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+
+if __name__ == "__main__":
+    # Test model
+    model = EmotionRecognitionModel(num_classes=7, learning_rate=1e-3, dropout=0.3)
+
+    # Test forward pass
+    dummy_input = torch.randn(4, 3, 224, 224)
+    output = model(dummy_input)
+
+    print(f"Input shape: {dummy_input.shape}")
+    print(f"Output shape: {output.shape}")
+
+    # Count parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"\nTotal parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
